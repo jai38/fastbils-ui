@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <rect width="512" height="512" rx="128" fill="#0284c7" />
+  <!-- Document Shape -->
+  <path d="M144 112C144 94.3269 158.327 80 176 80H288L368 160V400C368 417.673 353.673 432 336 432H176C158.327 432 144 417.673 144 400V112Z" fill="#ffffff" />
+  <!-- Corner fold -->
+  <path d="M288 80V160H368L288 80Z" fill="#bae6fd" />
+  <!-- Rupee Symbol -->
+  <text x="256" y="320" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="160" font-weight="bold" fill="#0369a1" text-anchor="middle" dominant-baseline="central">₹</text>
+  <!-- Accent bar -->
+  <rect x="192" y="368" width="128" height="16" rx="8" fill="#38bdf8" />
+</svg>
