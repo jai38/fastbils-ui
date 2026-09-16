@@ -85,6 +85,35 @@ export function useDeleteLogo() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: organisationKeys.profile() });
+      queryClient.invalidateQueries({ queryKey: ['organisation', 'logo'] });
     },
+  });
+}
+
+export async function fetchAuthenticatedLogoBlobUrl(): Promise<string | null> {
+  const token = getAccessToken();
+  try {
+    const response = await fetch(`${baseUrl}/api/v1/organisation/logo`, {
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    });
+    if (!response.ok) return null;
+    const blob = await response.blob();
+    return URL.createObjectURL(blob);
+  } catch {
+    return null;
+  }
+}
+
+export function useOrganisationLogo(logoObjectKey?: string | null) {
+  return useQuery({
+    queryKey: ['organisation', 'logo', logoObjectKey],
+    queryFn: async () => {
+      if (!logoObjectKey) return null;
+      return await fetchAuthenticatedLogoBlobUrl();
+    },
+    enabled: Boolean(logoObjectKey),
+    staleTime: 5 * 60 * 1000,
   });
 }

@@ -6,6 +6,7 @@ import { X, AlertTriangle, RotateCcw } from 'lucide-react';
 import type { Receipt } from './types';
 import { useReverseReceipt } from './api';
 import { formatIndianCurrency } from '@/utils/money';
+import { formatDate } from '@/utils/date';
 
 const reverseSchema = z.object({
   reason: z.string().min(5, 'Reversal reason must be at least 5 characters').max(500),
@@ -84,7 +85,7 @@ export const ReverseReceiptModal: React.FC<ReverseReceiptModalProps> = ({ receip
             </div>
             <div className="flex justify-between">
               <span className="text-gray-500">Payment Date:</span>
-              <span className="text-gray-800">{receipt.paymentDate}</span>
+              <span className="text-gray-800 font-mono">{formatDate(receipt.paymentDate)}</span>
             </div>
             {receipt.referenceNumber && (
               <div className="flex justify-between">

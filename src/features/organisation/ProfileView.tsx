@@ -11,13 +11,17 @@ import {
   CheckCircle2,
   AlertCircle,
   Clock,
+  Tag,
 } from 'lucide-react';
 import {
   useOrganisationProfile,
   useUpdateOrganisationProfile,
   useUploadLogo,
   useDeleteLogo,
+  useOrganisationLogo,
 } from './api';
+import { getStateName } from '@/utils/indianStates';
+import { HsnManagementView } from '@/features/hsn/HsnManagementView';
 
 const profileSchema = z
   .object({
@@ -38,7 +42,7 @@ const profileSchema = z
       .regex(/^[0-9]{2}$/, 'State code must be 2 digits')
       .optional()
       .or(z.literal('')),
-    addressLine1: z.string().optional().or(z.literal('')),
+    addressLine1: z.string().min(1, 'Registered business address is required').max(255),
     addressLine2: z.string().optional().or(z.literal('')),
     city: z.string().optional().or(z.literal('')),
     pincode: z
@@ -90,9 +94,9 @@ export const ProfileView: React.FC = () => {
   const uploadLogoMutation = useUploadLogo();
   const deleteLogoMutation = useDeleteLogo();
 
-  const [activeTab, setActiveTab] = useState<'profile' | 'invoice' | 'bank'>('profile');
+  const [activeTab, setActiveTab] = useState<'profile' | 'invoice' | 'bank' | 'hsn'>('profile');
   const [saveSuccess, setSaveSuccess] = useState(false);
-  const [logoPreviewUrl, setLogoPreviewUrl] = useState<string | null>(null);
+  const { data: logoBlobUrl } = useOrganisationLogo(org?.logoObjectKey);
 
   const {
     register,
@@ -128,6 +132,7 @@ export const ProfileView: React.FC = () => {
   });
 
   const watchedGstin = watch('gstin');
+  const watchedStateCode = watch('stateCode');
   const watchedPrefix = watch('invoicePrefix') || 'INV';
 
   // Populate form with existing organisation data
@@ -155,12 +160,6 @@ export const ProfileView: React.FC = () => {
         bankBranch: org.bankBranch || '',
         upiId: org.upiId || '',
       });
-
-      if (org.logoObjectKey) {
-        setLogoPreviewUrl('/api/v1/organisation/logo');
-      } else {
-        setLogoPreviewUrl(null);
-      }
     }
   }, [org, reset]);
 
@@ -208,9 +207,14 @@ export const ProfileView: React.FC = () => {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    if (file.size > 1 * 1024 * 1024) {
+      alert('Logo file size exceeds maximum limit of 1MB');
+      e.target.value = '';
+      return;
+    }
+
     try {
       await uploadLogoMutation.mutateAsync(file);
-      setLogoPreviewUrl(`/api/v1/organisation/logo?t=${Date.now()}`);
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Logo upload failed');
     }
@@ -220,7 +224,6 @@ export const ProfileView: React.FC = () => {
     if (!confirm('Are you sure you want to remove your organisation logo?')) return;
     try {
       await deleteLogoMutation.mutateAsync();
-      setLogoPreviewUrl(null);
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Failed to remove logo');
     }
@@ -300,6 +303,18 @@ export const ProfileView: React.FC = () => {
           <CreditCard className="w-3.5 h-3.5" />
           <span>Bank & UPI Details</span>
         </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab('hsn')}
+          className={`pb-2.5 px-3 border-b-2 transition-colors flex items-center space-x-1.5 ${
+            activeTab === 'hsn'
+              ? 'border-brand-600 text-brand-700 font-semibold'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          <Tag className="w-3.5 h-3.5" />
+          <span>HSN / SAC Directory</span>
+        </button>
       </div>
 
       {updateMutation.error && (
@@ -309,7 +324,12 @@ export const ProfileView: React.FC = () => {
         </div>
       )}
 
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+      {activeTab === 'hsn' ? (
+        <div className="bg-white p-6 border border-gray-200 rounded shadow-sm">
+          <HsnManagementView />
+        </div>
+      ) : (
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
         {/* Tab 1: Business Profile & Logo */}
         {activeTab === 'profile' && (
           <div className="space-y-6">
@@ -320,13 +340,13 @@ export const ProfileView: React.FC = () => {
                 <span>Organisation Logo</span>
               </h2>
               <p className="text-[11px] text-gray-500 mb-3">
-                Displayed in the header of issued PDF invoices. Formats: PNG, JPEG, WebP. Max 2MB.
+                Displayed in the header of issued PDF invoices. Formats: PNG, JPEG, WebP. Max 1MB.
               </p>
 
               <div className="flex items-center space-x-4">
                 <div className="w-24 h-16 bg-gray-50 border border-gray-200 rounded flex items-center justify-center overflow-hidden">
-                  {logoPreviewUrl ? (
-                    <img src={logoPreviewUrl} alt="Org Logo" className="max-h-full max-w-full object-contain" />
+                  {logoBlobUrl ? (
+                    <img src={logoBlobUrl} alt="Org Logo" className="max-h-full max-w-full object-contain" />
                   ) : (
                     <span className="text-[10px] text-gray-400 font-mono">No Logo</span>
                   )}
@@ -344,7 +364,7 @@ export const ProfileView: React.FC = () => {
                     />
                   </label>
 
-                  {logoPreviewUrl && (
+                  {(logoBlobUrl || org?.logoObjectKey) && (
                     <button
                       type="button"
                       onClick={handleDeleteLogo}
@@ -413,9 +433,16 @@ export const ProfileView: React.FC = () => {
                 </div>
 
                 <div>
-                  <label htmlFor="stateCode" className="block text-xs font-medium text-gray-700 mb-1">
-                    GST State Code
-                  </label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label htmlFor="stateCode" className="block text-xs font-medium text-gray-700">
+                      GST State Code
+                    </label>
+                    {getStateName(watchedStateCode) && (
+                      <span className="text-[11px] font-medium text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded">
+                        {getStateName(watchedStateCode)}
+                      </span>
+                    )}
+                  </div>
                   <input
                     id="stateCode"
                     type="text"
@@ -451,18 +478,35 @@ export const ProfileView: React.FC = () => {
                 <h3 className="text-xs font-medium text-gray-900 mb-3">Registered Business Address</h3>
                 <div className="space-y-3">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <input
-                      type="text"
-                      className="w-full px-2.5 py-1.5 text-xs bg-white border border-gray-300 rounded outline-none"
-                      placeholder="Address Line 1"
-                      {...register('addressLine1')}
-                    />
-                    <input
-                      type="text"
-                      className="w-full px-2.5 py-1.5 text-xs bg-white border border-gray-300 rounded outline-none"
-                      placeholder="Address Line 2 (optional)"
-                      {...register('addressLine2')}
-                    />
+                    <div>
+                      <label htmlFor="addressLine1" className="block text-xs font-medium text-gray-700 mb-1">
+                        Address Line 1 <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        id="addressLine1"
+                        type="text"
+                        className={`w-full px-2.5 py-1.5 text-xs bg-white border rounded outline-none ${
+                          errors.addressLine1 ? 'border-red-500 focus:ring-1 focus:ring-red-500' : 'border-gray-300'
+                        }`}
+                        placeholder="Street / Building Address"
+                        {...register('addressLine1')}
+                      />
+                      {errors.addressLine1 && (
+                        <p className="mt-1 text-[11px] text-red-600">{errors.addressLine1.message}</p>
+                      )}
+                    </div>
+                    <div>
+                      <label htmlFor="addressLine2" className="block text-xs font-medium text-gray-700 mb-1">
+                        Address Line 2 <span className="text-gray-400 font-normal">(optional)</span>
+                      </label>
+                      <input
+                        id="addressLine2"
+                        type="text"
+                        className="w-full px-2.5 py-1.5 text-xs bg-white border border-gray-300 rounded outline-none"
+                        placeholder="Suite / Unit / Floor"
+                        {...register('addressLine2')}
+                      />
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
@@ -682,6 +726,7 @@ export const ProfileView: React.FC = () => {
           </button>
         </div>
       </form>
+      )}
     </div>
   );
 };

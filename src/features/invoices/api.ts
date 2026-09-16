@@ -216,3 +216,25 @@ export async function openInvoicePdf(id: string): Promise<void> {
   const url = window.URL.createObjectURL(blob);
   window.open(url, '_blank');
 }
+
+export function useLatestIssuedInvoiceDate(financialYear?: number) {
+  return useQuery<{ latestIssuedDate: string | null }>({
+    queryKey: ['invoices', 'latest-issued-date', financialYear],
+    queryFn: async () => {
+      const token = getAccessToken();
+      const url = financialYear
+        ? `${baseUrl}/api/v1/invoices/latest-issued-date?financialYear=${financialYear}`
+        : `${baseUrl}/api/v1/invoices/latest-issued-date`;
+      const response = await fetch(url, {
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      });
+      if (!response.ok) {
+        return { latestIssuedDate: null };
+      }
+      return response.json();
+    },
+  });
+}
+

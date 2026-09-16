@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/features/auth/AuthContext';
 import { useDashboardMetrics } from './api';
 import { formatRupees } from '@/utils/money';
+import { formatDate } from '@/utils/date';
 import Big from 'big.js';
 
 export function DashboardView() {
@@ -347,8 +348,8 @@ export function DashboardView() {
                       <td className="py-2.5 px-3 font-sans text-gray-900 font-medium max-w-[200px] truncate" title={inv.customerLegalName}>
                         {inv.customerLegalName}
                       </td>
-                      <td className="py-2.5 px-3 text-gray-600">{inv.invoiceDate}</td>
-                      <td className="py-2.5 px-3 text-gray-600">{inv.dueDate}</td>
+                      <td className="py-2.5 px-3 text-gray-600">{formatDate(inv.invoiceDate)}</td>
+                      <td className="py-2.5 px-3 text-gray-600">{formatDate(inv.dueDate)}</td>
                       <td className="py-2.5 px-3 font-sans">
                         {isCritical ? (
                           <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-800">

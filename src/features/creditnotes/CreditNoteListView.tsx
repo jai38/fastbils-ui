@@ -14,6 +14,7 @@ import { Link } from 'react-router-dom';
 import { useCreditNotes, useCancelCreditNote, downloadCreditNotePdf } from './api';
 import type { CreditNoteSummary, CreditNoteState } from './types';
 import { formatIndianCurrency } from '@/utils/money';
+import { formatDate } from '@/utils/date';
 import Big from 'big.js';
 
 export const CreditNoteListView: React.FC = () => {
@@ -196,8 +197,8 @@ export const CreditNoteListView: React.FC = () => {
                     <td className="py-3.5 px-4 font-semibold text-slate-900 font-mono">
                       {cn.creditNoteNumber}
                     </td>
-                    <td className="py-3.5 px-4 text-slate-600 whitespace-nowrap">
-                      {cn.creditNoteDate}
+                    <td className="py-3.5 px-4 text-slate-600 whitespace-nowrap font-mono">
+                      {formatDate(cn.creditNoteDate)}
                     </td>
                     <td className="py-3.5 px-4">
                       <Link

@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { X, AlertCircle } from 'lucide-react';
 import type { Customer } from './types';
 import { useCreateCustomer, useUpdateCustomer } from './api';
+import { getStateName } from '@/utils/indianStates';
 
 const customerSchema = z
   .object({
@@ -18,7 +19,7 @@ const customerSchema = z
       .or(z.literal('')),
     pan: z
       .string()
-      .regex(/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/, 'Invalid PAN format (10 characters)')
+      .regex(/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/, 'Invalid PAN format (10 characters: e.g. ABCDE1234F)')
       .optional()
       .or(z.literal('')),
     billingAddressLine1: z.string().optional().or(z.literal('')),
@@ -68,6 +69,18 @@ const customerSchema = z
   )
   .refine(
     (data) => {
+      if (!data.isRegistered && (!data.pan || !/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(data.pan.trim()))) {
+        return false;
+      }
+      return true;
+    },
+    {
+      message: 'PAN is mandatory for customers not registered under GST (10 characters: e.g. ABCDE1234F)',
+      path: ['pan'],
+    }
+  )
+  .refine(
+    (data) => {
       if (data.gstin && data.gstin.length >= 2) {
         const gstinState = data.gstin.substring(0, 2);
         if (data.billingStateCode !== gstinState) {
@@ -88,12 +101,14 @@ interface CustomerFormModalProps {
   isOpen: boolean;
   onClose: () => void;
   customerToEdit: Customer | null;
+  onCustomerCreated?: (customer: Customer) => void;
 }
 
 export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
   isOpen,
   onClose,
   customerToEdit,
+  onCustomerCreated,
 }) => {
   const createMutation = useCreateCustomer();
   const updateMutation = useUpdateCustomer();
@@ -111,7 +126,7 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
     defaultValues: {
       legalName: '',
       tradeName: '',
-      isRegistered: false,
+      isRegistered: true,
       gstin: '',
       pan: '',
       billingAddressLine1: '',
@@ -135,6 +150,9 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
 
   const watchedGstin = watch('gstin');
   const watchedIsRegistered = watch('isRegistered');
+  const watchedBillingState = watch('billingStateCode');
+  const watchedShippingState = watch('shippingStateCode');
+  const watchedPosState = watch('defaultPlaceOfSupplyStateCode');
 
   useEffect(() => {
     if (customerToEdit) {
@@ -166,7 +184,7 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
       reset({
         legalName: '',
         tradeName: '',
-        isRegistered: false,
+        isRegistered: true,
         gstin: '',
         pan: '',
         billingAddressLine1: '',
@@ -239,7 +257,7 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
           },
         });
       } else {
-        await createMutation.mutateAsync({
+        const created = await createMutation.mutateAsync({
           ...values,
           tradeName: values.tradeName || undefined,
           gstin: values.gstin || undefined,
@@ -259,6 +277,7 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
           defaultPlaceOfSupplyStateCode: values.defaultPlaceOfSupplyStateCode || undefined,
           notes: values.notes || undefined,
         });
+        onCustomerCreated?.(created);
       }
       onClose();
     } catch (err: unknown) {
@@ -342,14 +361,14 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
                 {...register('isRegistered')}
               />
               <label htmlFor="isRegistered" className="font-medium text-gray-900 cursor-pointer">
-                Registered under GST (B2B Customer)
+                Registered under GST
               </label>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
                 <label htmlFor="modalGstin" className="block font-medium text-gray-700 mb-1">
-                  GSTIN {watchedIsRegistered && <span className="text-red-500">*</span>}
+                  GSTIN {watchedIsRegistered ? <span className="text-red-500">*</span> : <span className="text-gray-400 font-normal">(optional)</span>}
                 </label>
                 <input
                   id="modalGstin"
@@ -365,9 +384,16 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
               </div>
 
               <div>
-                <label htmlFor="modalBillingState" className="block font-medium text-gray-700 mb-1">
-                  Billing State Code <span className="text-red-500">*</span>
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                  <label htmlFor="modalBillingState" className="block font-medium text-gray-700">
+                    Billing State Code <span className="text-red-500">*</span>
+                  </label>
+                  {getStateName(watchedBillingState) && (
+                    <span className="text-[11px] font-medium text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded">
+                      {getStateName(watchedBillingState)}
+                    </span>
+                  )}
+                </div>
                 <input
                   id="modalBillingState"
                   type="text"
@@ -383,7 +409,7 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
 
               <div>
                 <label htmlFor="modalPan" className="block font-medium text-gray-700 mb-1">
-                  PAN (optional)
+                  PAN {!watchedIsRegistered ? <span className="text-red-500">*</span> : <span className="text-gray-400 font-normal">(optional)</span>}
                 </label>
                 <input
                   id="modalPan"
@@ -393,6 +419,9 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
                   placeholder="ABCDE1234F"
                   {...register('pan')}
                 />
+                {errors.pan && (
+                  <p className="mt-1 text-[11px] text-red-600">{errors.pan.message}</p>
+                )}
               </div>
             </div>
           </div>
@@ -467,13 +496,20 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
                   placeholder="Shipping City"
                   {...register('shippingCity')}
                 />
-                <input
-                  type="text"
-                  maxLength={2}
-                  className="w-full px-2.5 py-1.5 bg-white border border-gray-300 rounded font-mono outline-none"
-                  placeholder="State Code (2 digits)"
-                  {...register('shippingStateCode')}
-                />
+                <div>
+                  <input
+                    type="text"
+                    maxLength={2}
+                    className="w-full px-2.5 py-1.5 bg-white border border-gray-300 rounded font-mono outline-none"
+                    placeholder="State Code (2 digits)"
+                    {...register('shippingStateCode')}
+                  />
+                  {getStateName(watchedShippingState) && (
+                    <p className="text-[10px] font-medium text-indigo-700 mt-0.5">
+                      {getStateName(watchedShippingState)}
+                    </p>
+                  )}
+                </div>
                 <input
                   type="text"
                   maxLength={6}
@@ -540,9 +576,16 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
             </div>
 
             <div>
-              <label htmlFor="modalPos" className="block font-medium text-gray-700 mb-1">
-                Default Place of Supply (State Code)
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label htmlFor="modalPos" className="block font-medium text-gray-700">
+                  Default Place of Supply (State Code)
+                </label>
+                {getStateName(watchedPosState) && (
+                  <span className="text-[11px] font-medium text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded">
+                    {getStateName(watchedPosState)}
+                  </span>
+                )}
+              </div>
               <input
                 id="modalPos"
                 type="text"

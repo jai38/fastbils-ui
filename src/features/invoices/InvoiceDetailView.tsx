@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '@/features/auth/AuthContext';
-import { useOrganisationProfile } from '@/features/organisation/api';
+import { useOrganisationProfile, useOrganisationLogo } from '@/features/organisation/api';
 import {
   useInvoice,
   useIssueInvoice,
@@ -18,12 +18,15 @@ import { useInvoiceCreditNotes, downloadCreditNotePdf, useCancelCreditNote } fro
 import { CreateCreditNoteModal } from '@/features/creditnotes/CreateCreditNoteModal';
 import type { CreditNote } from '@/features/creditnotes/types';
 import { formatRupees } from '@/utils/money';
+import { formatDate } from '@/utils/date';
+import { getStateName } from '@/utils/indianStates';
 
 export function InvoiceDetailView() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
   const { data: organisation } = useOrganisationProfile();
+  const { data: logoBlobUrl } = useOrganisationLogo(organisation?.logoObjectKey);
 
   const { data: invoice, isLoading, error } = useInvoice(id);
 
@@ -265,12 +268,17 @@ export function InvoiceDetailView() {
       <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-8 space-y-6 print:border-none print:shadow-none print:p-0">
         {/* Document Header */}
         <div className="flex justify-between items-start border-b border-gray-200 pb-4">
-          <div>
-            <div className="text-2xl font-black tracking-tight text-gray-900 uppercase">
-              {organisation?.gstin ? 'TAX INVOICE' : 'BILL OF SUPPLY'}
-            </div>
-            <div className="text-xs text-gray-500 font-medium">
-              (Issued under Rule 46 of the CGST Rules, 2017)
+          <div className="flex items-start space-x-3">
+            {logoBlobUrl && (
+              <img src={logoBlobUrl} alt="Org Logo" className="h-12 w-auto object-contain max-w-[140px]" />
+            )}
+            <div>
+              <div className="text-2xl font-black tracking-tight text-gray-900 uppercase">
+                {organisation?.gstin ? 'TAX INVOICE' : 'BILL OF SUPPLY'}
+              </div>
+              <div className="text-xs text-gray-500 font-medium">
+                (Issued under Rule 46 of the CGST Rules, 2017)
+              </div>
             </div>
           </div>
           <div className="text-right space-y-1">
@@ -315,16 +323,16 @@ export function InvoiceDetailView() {
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 p-3 bg-gray-50 rounded border border-gray-100">
           <div>
             <div className="text-[11px] text-gray-500">Invoice Date:</div>
-            <div className="font-semibold text-gray-900 font-mono">{invoice.invoiceDate}</div>
+            <div className="font-semibold text-gray-900 font-mono">{formatDate(invoice.invoiceDate)}</div>
           </div>
           <div>
             <div className="text-[11px] text-gray-500">Payment Due Date:</div>
-            <div className="font-semibold text-gray-900 font-mono">{invoice.dueDate}</div>
+            <div className="font-semibold text-gray-900 font-mono">{formatDate(invoice.dueDate)}</div>
           </div>
           <div>
             <div className="text-[11px] text-gray-500">Place of Supply:</div>
             <div className="font-semibold text-gray-900">
-              State {invoice.placeOfSupplyStateCode} ({invoice.supplyType})
+              State {invoice.placeOfSupplyStateCode} {getStateName(invoice.placeOfSupplyStateCode) ? `(${getStateName(invoice.placeOfSupplyStateCode)})` : ''} ({invoice.supplyType})
             </div>
           </div>
           <div>
@@ -378,7 +386,7 @@ export function InvoiceDetailView() {
             {invoice.poNumber && (
               <div className="text-gray-700 pt-1">
                 <strong>PO Reference:</strong> {invoice.poNumber}{' '}
-                {invoice.poDate && `(Dated: ${invoice.poDate})`}
+                {invoice.poDate && `(Dated: ${formatDate(invoice.poDate)})`}
               </div>
             )}
           </div>
@@ -698,7 +706,7 @@ export function InvoiceDetailView() {
                       key={receipt.id}
                       className={receipt.isReversed ? 'bg-red-50/20 text-gray-400' : 'hover:bg-gray-50/60'}
                     >
-                      <td className="px-3 py-2 font-mono whitespace-nowrap">{receipt.paymentDate}</td>
+                      <td className="px-3 py-2 font-mono whitespace-nowrap">{formatDate(receipt.paymentDate)}</td>
                       <td className="px-3 py-2 font-medium">{receipt.paymentMethod}</td>
                       <td className="px-3 py-2">
                         {receipt.referenceNumber && (
@@ -812,7 +820,7 @@ export function InvoiceDetailView() {
                       className={cn.state === 'CANCELLED' ? 'bg-red-50/20 text-gray-400' : 'hover:bg-gray-50/60'}
                     >
                       <td className="px-3 py-2 font-mono font-semibold text-gray-900">{cn.creditNoteNumber}</td>
-                      <td className="px-3 py-2 font-mono whitespace-nowrap">{cn.creditNoteDate}</td>
+                      <td className="px-3 py-2 font-mono whitespace-nowrap">{formatDate(cn.creditNoteDate)}</td>
                       <td className="px-3 py-2">
                         <span className="font-medium text-gray-700">{cn.reasonDescription}</span>
                         {cn.reasonNotes && (

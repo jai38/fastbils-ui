@@ -13,6 +13,7 @@ import {
 import type { Customer } from './types';
 import { useCustomers, useArchiveCustomer, useUnarchiveCustomer } from './api';
 import { CustomerFormModal } from './CustomerFormModal';
+import { getStateName } from '@/utils/indianStates';
 
 export const CustomerListView: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -42,13 +43,13 @@ export const CustomerListView: React.FC = () => {
 
   const handleArchive = async (customer: Customer) => {
     const message =
-      `Archive "${customer.legalName}"?\n\n` +
-      `Rule: Archived customers cannot be selected on new invoices, but their past invoices remain intact.`;
+      `Deactivate "${customer.legalName}"?\n\n` +
+      `Rule: Inactive customers cannot be selected on new invoices, but their past invoices remain intact.`;
     if (confirm(message)) {
       try {
         await archiveMutation.mutateAsync(customer.id);
       } catch (err) {
-        alert(err instanceof Error ? err.message : 'Failed to archive customer');
+        alert(err instanceof Error ? err.message : 'Failed to deactivate customer');
       }
     }
   };
@@ -57,7 +58,7 @@ export const CustomerListView: React.FC = () => {
     try {
       await unarchiveMutation.mutateAsync(customer.id);
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to restore customer');
+      alert(err instanceof Error ? err.message : 'Failed to activate customer');
     }
   };
 
@@ -115,7 +116,7 @@ export const CustomerListView: React.FC = () => {
                 : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
             }`}
           >
-            Archived
+            Inactive
           </button>
         </div>
       </div>
@@ -143,7 +144,7 @@ export const CustomerListView: React.FC = () => {
               {searchTerm
                 ? 'No matching customers found'
                 : showArchived
-                ? 'No archived customers'
+                ? 'No inactive customers'
                 : 'No customers recorded yet'}
             </div>
             {!showArchived && !searchTerm && (
@@ -188,14 +189,14 @@ export const CustomerListView: React.FC = () => {
                             {customer.gstin}
                           </span>
                           <div className="text-[11px] text-gray-500 mt-0.5">
-                            State Code: <span className="font-mono">{customer.billingStateCode}</span>
+                            State: <span className="font-medium text-gray-800">{getStateName(customer.billingStateCode) || customer.billingStateCode}</span> <span className="font-mono text-gray-400">({customer.billingStateCode})</span>
                           </div>
                         </div>
                       ) : (
                         <div>
                           <span className="text-gray-500 italic text-[11px]">Unregistered</span>
                           <div className="text-[11px] text-gray-500 mt-0.5">
-                            State: <span className="font-mono">{customer.billingStateCode}</span>
+                            State: <span className="font-medium text-gray-800">{getStateName(customer.billingStateCode) || customer.billingStateCode}</span> <span className="font-mono text-gray-400">({customer.billingStateCode})</span>
                           </div>
                         </div>
                       )}
@@ -231,7 +232,7 @@ export const CustomerListView: React.FC = () => {
                     <td className="py-2.5 px-3">
                       {customer.isArchived ? (
                         <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-100 text-amber-800 border border-amber-200">
-                          Archived
+                          Inactive
                         </span>
                       ) : (
                         <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-100 text-emerald-800 border border-emerald-200">
@@ -254,7 +255,7 @@ export const CustomerListView: React.FC = () => {
                         {customer.isArchived ? (
                           <button
                             onClick={() => handleRestore(customer)}
-                            title="Restore Customer"
+                            title="Activate Customer"
                             className="text-amber-600 hover:text-amber-700 p-1 rounded hover:bg-amber-50 transition-colors"
                           >
                             <RotateCcw className="w-3.5 h-3.5" />
@@ -262,7 +263,7 @@ export const CustomerListView: React.FC = () => {
                         ) : (
                           <button
                             onClick={() => handleArchive(customer)}
-                            title="Archive Customer"
+                            title="Deactivate Customer"
                             className="text-gray-400 hover:text-red-600 p-1 rounded hover:bg-gray-100 transition-colors"
                           >
                             <Archive className="w-3.5 h-3.5" />

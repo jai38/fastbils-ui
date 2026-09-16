@@ -5,6 +5,7 @@ import type { Invoice } from '@/features/invoices/types';
 import { CREDIT_NOTE_REASONS, type CreditNoteReason, type CreateCreditNoteRequest } from './types';
 import { useCreateCreditNote } from './api';
 import { formatIndianCurrency } from '@/utils/money';
+import { formatDate } from '@/utils/date';
 
 interface CreateCreditNoteModalProps {
   invoice: Invoice;
@@ -130,7 +131,7 @@ export const CreateCreditNoteModal: React.FC<CreateCreditNoteModalProps> = ({
     setValidationError(null);
 
     if (creditNoteDate < invoice.invoiceDate) {
-      setValidationError(`Credit note date cannot be earlier than invoice date (${invoice.invoiceDate})`);
+      setValidationError(`Credit note date cannot be earlier than invoice date (${formatDate(invoice.invoiceDate)})`);
       return;
     }
 
@@ -225,7 +226,7 @@ export const CreateCreditNoteModal: React.FC<CreateCreditNoteModalProps> = ({
                 className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
                 required
               />
-              <span className="text-[11px] text-slate-500">Invoice date: {invoice.invoiceDate}</span>
+              <span className="text-[11px] text-slate-500">Invoice date: {formatDate(invoice.invoiceDate)}</span>
             </div>
 
             <div>

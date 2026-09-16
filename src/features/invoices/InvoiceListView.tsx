@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useInvoices, downloadInvoicePdf } from './api';
 import { formatRupees } from '@/utils/money';
+import { formatDate } from '@/utils/date';
 import type { InvoiceState } from './types';
 
 export function InvoiceListView() {
@@ -185,8 +186,8 @@ export function InvoiceListView() {
                         </span>
                       )}
                     </td>
-                    <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{inv.invoiceDate}</td>
-                    <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{inv.dueDate}</td>
+                    <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap font-mono">{formatDate(inv.invoiceDate)}</td>
+                    <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap font-mono">{formatDate(inv.dueDate)}</td>
                     <td className="px-3 py-2.5 font-medium text-gray-900 max-w-[200px] truncate">
                       {inv.customerLegalName}
                     </td>

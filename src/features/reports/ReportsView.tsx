@@ -10,6 +10,7 @@ import {
 } from './api';
 import { useCustomers } from '@/features/customers/api';
 import { formatRupees } from '@/utils/money';
+import { formatDate } from '@/utils/date';
 import Big from 'big.js';
 import type { PaymentMethod } from '@/features/receipts/types';
 
@@ -370,7 +371,7 @@ function InvoiceRegisterTable({
                 >
                   {item.invoiceNumber}
                 </td>
-                <td className="py-2 px-3 text-gray-600 whitespace-nowrap">{item.invoiceDate}</td>
+                <td className="py-2 px-3 text-gray-600 whitespace-nowrap">{formatDate(item.invoiceDate)}</td>
                 <td className="py-2 px-3 font-sans text-gray-900 font-medium max-w-[160px] truncate" title={item.customerLegalName}>
                   {item.customerLegalName}
                 </td>
@@ -701,7 +702,7 @@ function ReceiptsRegisterTable({
           <tbody className="divide-y divide-gray-200 font-mono">
             {data.map((item) => (
               <tr key={item.id} className={`hover:bg-gray-50/75 transition-colors ${item.isReversed ? 'opacity-60 line-through bg-gray-50' : ''}`}>
-                <td className="py-2 px-3 text-gray-600 whitespace-nowrap">{item.paymentDate}</td>
+                <td className="py-2 px-3 text-gray-600 whitespace-nowrap">{formatDate(item.paymentDate)}</td>
                 <td
                   className="py-2 px-3 font-semibold text-blue-600 hover:underline cursor-pointer"
                   onClick={() => onInvoiceClick(item.invoiceId)}

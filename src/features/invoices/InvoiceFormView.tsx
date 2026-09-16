@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import Big from 'big.js';
+import { Plus, Loader2, Lock } from 'lucide-react';
 import { useAuth } from '@/features/auth/AuthContext';
 import { useCustomers } from '@/features/customers/api';
 import {
@@ -8,8 +9,15 @@ import {
   useUpdateDraftInvoice,
   useInvoice,
   useIssueInvoice,
+  useLatestIssuedInvoiceDate,
 } from './api';
 import { formatRupees } from '@/utils/money';
+import { formatDate } from '@/utils/date';
+import { getStateName } from '@/utils/indianStates';
+import { SearchableSelect, type SelectOption } from '@/components/ui/SearchableSelect';
+import { CustomerFormModal } from '@/features/customers/CustomerFormModal';
+import { HsnFormModal } from '@/features/hsn/HsnFormModal';
+import { useHsnItems, useDefaultHsnItem } from '@/features/hsn/api';
 import type { InvoiceLineInput, CreateDraftInvoiceRequest } from './types';
 
 const GST_RATES = ['0', '5', '12', '18', '28'];
@@ -41,6 +49,15 @@ export function InvoiceFormView() {
   const createDraftMutation = useCreateDraftInvoice();
   const updateDraftMutation = useUpdateDraftInvoice();
   const issueMutation = useIssueInvoice();
+
+  const { data: hsnItems = [] } = useHsnItems(true);
+  const { data: defaultHsn } = useDefaultHsnItem();
+  const { data: latestDateData } = useLatestIssuedInvoiceDate();
+  const latestIssuedDate = latestDateData?.latestIssuedDate;
+
+  const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false);
+  const [isHsnModalOpen, setIsHsnModalOpen] = useState(false);
+  const [activeLineForHsnModal, setActiveLineForHsnModal] = useState<number | null>(null);
 
   // Form State
   const [customerId, setCustomerId] = useState('');
@@ -108,6 +125,26 @@ export function InvoiceFormView() {
       }
     }
   }, [existingInvoice, navigate]);
+
+  // Prepopulate default HSN on initial empty draft
+  useEffect(() => {
+    if (!isEditing && defaultHsn && lines.length === 1 && !lines[0].hsnOrSacCode && !lines[0].itemDescription) {
+      setLines([
+        {
+          id: '1',
+          itemDescription: defaultHsn.name || '',
+          hsnOrSacCode: defaultHsn.code,
+          isService: defaultHsn.isService,
+          quantity: '1',
+          unitOfMeasure: 'NOS',
+          unitPrice: '0.00',
+          discountPercent: '0.00',
+          taxRatePercent: String(defaultHsn.taxRatePercent),
+          taxCategory: 'TAXABLE',
+        },
+      ]);
+    }
+  }, [defaultHsn, isEditing]);
 
   // When customer changes, auto-fill credit days and place of supply
   const handleCustomerChange = (selectedId: string) => {
@@ -220,14 +257,14 @@ export function InvoiceFormView() {
       ...prev,
       {
         id: String(Date.now()),
-        itemDescription: '',
-        hsnOrSacCode: '',
-        isService: false,
+        itemDescription: defaultHsn?.name || '',
+        hsnOrSacCode: defaultHsn?.code || '',
+        isService: defaultHsn?.isService || false,
         quantity: '1',
         unitOfMeasure: 'NOS',
         unitPrice: '0.00',
         discountPercent: '0.00',
-        taxRatePercent: '18',
+        taxRatePercent: defaultHsn ? String(defaultHsn.taxRatePercent) : '18',
         taxCategory: 'TAXABLE',
       },
     ]);
@@ -245,6 +282,45 @@ export function InvoiceFormView() {
       return updated;
     });
   };
+
+  const handleHsnChange = (index: number, hsnCode: string) => {
+    const selectedItem = hsnItems.find((item) => item.code === hsnCode);
+    setLines((prev) => {
+      const updated = [...prev];
+      const cur = updated[index];
+      if (selectedItem) {
+        updated[index] = {
+          ...cur,
+          hsnOrSacCode: selectedItem.code,
+          taxRatePercent: String(selectedItem.taxRatePercent),
+          isService: selectedItem.isService,
+          itemDescription: cur.itemDescription.trim() ? cur.itemDescription : selectedItem.name,
+        };
+      } else {
+        updated[index] = {
+          ...cur,
+          hsnOrSacCode: hsnCode,
+        };
+      }
+      return updated;
+    });
+  };
+
+  const customerOptions: SelectOption[] = customers.map((c) => ({
+    value: c.id,
+    label: c.legalName,
+    subLabel: c.gstin
+      ? `GSTIN: ${c.gstin} • State: ${c.billingStateCode}`
+      : `Unregistered • State: ${c.billingStateCode}`,
+    badge: c.isRegistered ? 'GST' : 'UNREGISTERED',
+  }));
+
+  const hsnOptions: SelectOption[] = hsnItems.map((item) => ({
+    value: item.code,
+    label: `${item.code} - ${item.name}`,
+    subLabel: `${item.isService ? 'Service (SAC)' : 'Goods (HSN)'} • ${item.taxRatePercent}% GST`,
+    badge: `${item.taxRatePercent}%`,
+  }));
 
   const buildPayload = (): CreateDraftInvoiceRequest => {
     const linePayloads: InvoiceLineInput[] = lines.map((l, index) => ({
@@ -282,6 +358,15 @@ export function InvoiceFormView() {
       return;
     }
 
+    if (latestIssuedDate && invoiceDate < latestIssuedDate) {
+      setErrorMessage(
+        `Invoice date (${formatDate(invoiceDate)}) cannot be before the latest issued invoice date (${formatDate(
+          latestIssuedDate
+        )}) in this series.`
+      );
+      return;
+    }
+
     try {
       const payload = buildPayload();
       if (isEditing) {
@@ -298,6 +383,14 @@ export function InvoiceFormView() {
 
   const handleConfirmIssue = async () => {
     setErrorMessage(null);
+    if (latestIssuedDate && invoiceDate < latestIssuedDate) {
+      setErrorMessage(
+        `Invoice date (${formatDate(invoiceDate)}) cannot be before the latest issued invoice date (${formatDate(
+          latestIssuedDate
+        )}) in this series.`
+      );
+      return;
+    }
     setShowIssueModal(false);
     try {
       let targetId = id;
@@ -379,18 +472,18 @@ export function InvoiceFormView() {
             <label className="block text-xs font-semibold text-gray-700 mb-1">
               Customer <span className="text-red-500">*</span>
             </label>
-            <select
+            <SearchableSelect
+              options={customerOptions}
               value={customerId}
-              onChange={(e) => handleCustomerChange(e.target.value)}
-              className="w-full text-xs border border-gray-300 rounded px-2.5 py-1.5 bg-white focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-            >
-              <option value="">Select Customer...</option>
-              {customers.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.legalName} {c.gstin ? `(${c.gstin})` : '(Unregistered)'}
-                </option>
-              ))}
-            </select>
+              onChange={handleCustomerChange}
+              placeholder="Select Customer..."
+              searchPlaceholder="Search by name, GSTIN or state..."
+              actionOption={{
+                label: '+ Add New Customer',
+                onAction: () => setIsCustomerModalOpen(true),
+                icon: <Plus className="w-3.5 h-3.5 text-indigo-600" />,
+              }}
+            />
           </div>
 
           {/* Invoice Date */}
@@ -401,9 +494,15 @@ export function InvoiceFormView() {
             <input
               type="date"
               value={invoiceDate}
+              min={latestIssuedDate || undefined}
               onChange={(e) => setInvoiceDate(e.target.value)}
-              className="w-full text-xs border border-gray-300 rounded px-2.5 py-1.5"
+              className="w-full text-xs border border-gray-300 rounded px-2.5 py-1.5 focus:ring-1 focus:ring-blue-500"
             />
+            {latestIssuedDate && (
+              <p className="text-[11px] text-gray-500 mt-1">
+                Min date: <span className="font-semibold text-gray-700 font-mono">{formatDate(latestIssuedDate)}</span> (latest issued in series)
+              </p>
+            )}
           </div>
 
           {/* Place of Supply with Tax Indicator */}
@@ -412,13 +511,20 @@ export function InvoiceFormView() {
               <label className="text-xs font-semibold text-gray-700">
                 Place of Supply (State Code)
               </label>
-              <span
-                className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
-                  isIntraState ? 'bg-emerald-100 text-emerald-800' : 'bg-purple-100 text-purple-800'
-                }`}
-              >
-                {isIntraState ? 'Intra-State (CGST + SGST)' : 'Inter-State (IGST)'}
-              </span>
+              <div className="flex items-center space-x-1.5">
+                {getStateName(placeOfSupplyStateCode) && (
+                  <span className="text-[11px] font-medium text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded">
+                    {getStateName(placeOfSupplyStateCode)}
+                  </span>
+                )}
+                <span
+                  className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
+                    isIntraState ? 'bg-emerald-100 text-emerald-800' : 'bg-purple-100 text-purple-800'
+                  }`}
+                >
+                  {isIntraState ? 'Intra-State (CGST + SGST)' : 'Inter-State (IGST)'}
+                </span>
+              </div>
             </div>
             <input
               type="text"
@@ -510,7 +616,7 @@ export function InvoiceFormView() {
                 <th className="px-2 py-2 text-left font-semibold text-gray-600 min-w-[200px]">
                   Description <span className="text-red-500">*</span>
                 </th>
-                <th className="px-2 py-2 text-left font-semibold text-gray-600 w-24">HSN/SAC</th>
+                <th className="px-2 py-2 text-left font-semibold text-gray-600 min-w-[170px]">HSN/SAC</th>
                 <th className="px-2 py-2 text-right font-semibold text-gray-600 w-20">Qty</th>
                 <th className="px-2 py-2 text-left font-semibold text-gray-600 w-16">Unit</th>
                 <th className="px-2 py-2 text-right font-semibold text-gray-600 w-28">Rate (₹)</th>
@@ -538,12 +644,20 @@ export function InvoiceFormView() {
                       />
                     </td>
                     <td className="px-2 py-1.5">
-                      <input
-                        type="text"
-                        placeholder="HSN"
+                      <SearchableSelect
+                        options={hsnOptions}
                         value={line.hsnOrSacCode}
-                        onChange={(e) => handleLineChange(idx, 'hsnOrSacCode', e.target.value)}
-                        className="w-full px-2 py-1 border border-gray-300 rounded text-xs font-mono"
+                        onChange={(val) => handleHsnChange(idx, val)}
+                        placeholder="Select HSN..."
+                        searchPlaceholder="Search HSN or name..."
+                        actionOption={{
+                          label: '+ Add HSN / SAC',
+                          onAction: () => {
+                            setActiveLineForHsnModal(idx);
+                            setIsHsnModalOpen(true);
+                          },
+                          icon: <Plus className="w-3.5 h-3.5 text-indigo-600" />,
+                        }}
                       />
                     </td>
                     <td className="px-2 py-1.5">
@@ -589,17 +703,27 @@ export function InvoiceFormView() {
                       {calc.taxable.toFixed(2)}
                     </td>
                     <td className="px-2 py-1.5">
-                      <select
-                        value={line.taxRatePercent}
-                        onChange={(e) => handleLineChange(idx, 'taxRatePercent', e.target.value)}
-                        className="w-full px-1.5 py-1 border border-gray-300 rounded text-xs bg-white font-mono"
-                      >
-                        {GST_RATES.map((r) => (
-                          <option key={r} value={r}>
-                            {r}%
-                          </option>
-                        ))}
-                      </select>
+                      {line.hsnOrSacCode ? (
+                        <div
+                          className="flex items-center justify-between px-2 py-1 bg-gray-50 border border-gray-200 rounded text-xs font-mono text-gray-800"
+                          title="GST slab rate locked to HSN item"
+                        >
+                          <span>{line.taxRatePercent}%</span>
+                          <Lock className="w-3 h-3 text-gray-400 ml-1 flex-shrink-0" />
+                        </div>
+                      ) : (
+                        <select
+                          value={line.taxRatePercent}
+                          onChange={(e) => handleLineChange(idx, 'taxRatePercent', e.target.value)}
+                          className="w-full px-1.5 py-1 border border-gray-300 rounded text-xs bg-white font-mono"
+                        >
+                          {GST_RATES.map((r) => (
+                            <option key={r} value={r}>
+                              {r}%
+                            </option>
+                          ))}
+                        </select>
+                      )}
                     </td>
                     <td className="px-2 py-1.5 text-right font-mono text-gray-700">
                       {calc.totalTax.toFixed(2)}
@@ -729,7 +853,7 @@ export function InvoiceFormView() {
                   <strong>Customer:</strong> {customers.find((c) => c.id === customerId)?.legalName}
                 </div>
                 <div>
-                  <strong>Invoice Date:</strong> {invoiceDate}
+                  <strong>Invoice Date:</strong> {formatDate(invoiceDate)}
                 </div>
                 <div>
                   <strong>Grand Total:</strong> {formatRupees(grandTotal.toFixed(2))}
@@ -756,6 +880,45 @@ export function InvoiceFormView() {
           </div>
         </div>
       )}
+
+      {/* Full-screen Loading Overlay for invoice saving/issuance */}
+      {(issueMutation.isPending || createDraftMutation.isPending || updateDraftMutation.isPending) && (
+        <div className="fixed inset-0 z-50 bg-gray-900/60 backdrop-blur-xs flex flex-col items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-2xl p-6 max-w-sm w-full flex flex-col items-center text-center space-y-3 animate-in fade-in zoom-in-95 duration-150">
+            <Loader2 className="w-10 h-10 animate-spin text-blue-600" />
+            <h3 className="text-sm font-bold text-gray-900">
+              {issueMutation.isPending ? 'Issuing Tax Invoice...' : 'Saving Draft Invoice...'}
+            </h3>
+            <p className="text-xs text-gray-500">
+              {issueMutation.isPending
+                ? 'Assigning sequential legal series number, calculating GST splits, and generating signed PDF.'
+                : 'Saving invoice line items and calculating tax breakdown.'}
+            </p>
+          </div>
+        </div>
+      )}
+
+      <CustomerFormModal
+        isOpen={isCustomerModalOpen}
+        onClose={() => setIsCustomerModalOpen(false)}
+        customerToEdit={null}
+        onCustomerCreated={(newCust) => {
+          handleCustomerChange(newCust.id);
+        }}
+      />
+
+      <HsnFormModal
+        isOpen={isHsnModalOpen}
+        onClose={() => {
+          setIsHsnModalOpen(false);
+          setActiveLineForHsnModal(null);
+        }}
+        onSuccess={(createdHsn) => {
+          if (activeLineForHsnModal !== null) {
+            handleHsnChange(activeLineForHsnModal, createdHsn.code);
+          }
+        }}
+      />
     </div>
   );
 }
