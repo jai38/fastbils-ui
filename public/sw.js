@@ -1,14 +1,12 @@
 // FastBills Service Worker - PWA & Offline Support
-const CACHE_NAME = 'fastbills-cache-v1';
+const CACHE_NAME = 'fastbills-cache-v2';
 
 const PRECACHE_ASSETS = [
-  '/',
-  '/index.html',
   '/favicon.svg',
   '/manifest.webmanifest'
 ];
 
-// Install event: Precache core static shell
+// Install event: Precache core static shell (excluding index.html so navigation is always fresh)
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
@@ -19,7 +17,7 @@ self.addEventListener('install', (event) => {
   );
 });
 
-// Activate event: Clean up old caches and claim clients
+// Activate event: Clean up old caches and claim clients immediately
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) => {
@@ -41,12 +39,12 @@ self.addEventListener('fetch', (event) => {
   const request = event.request;
   const url = new URL(request.url);
 
-  // Skip non-GET requests (e.g. POST, PUT, DELETE for financial mutations)
+  // Skip non-GET requests
   if (request.method !== 'GET') {
     return;
   }
 
-  // API calls: Network-first with no cache mutation
+  // API calls: Network-first with offline error response
   if (url.pathname.startsWith('/api/')) {
     event.respondWith(
       fetch(request).catch(() => {
@@ -65,7 +63,23 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Static assets (scripts, styles, fonts, images): Cache-first with network fallback
+  // Navigation / HTML requests: Network-First to guarantee latest deployed assets
+  if (request.mode === 'navigate' || request.headers.get('accept')?.includes('text/html')) {
+    event.respondWith(
+      fetch(request)
+        .then((networkResponse) => {
+          if (networkResponse && networkResponse.status === 200) {
+            const copy = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+          }
+          return networkResponse;
+        })
+        .catch(() => caches.match('/index.html') || caches.match('/'))
+    );
+    return;
+  }
+
+  // Static hashed assets (scripts, styles, fonts, images): Cache-first with network fallback
   if (
     url.origin === self.location.origin ||
     url.hostname.includes('googleapis.com') ||
@@ -74,12 +88,6 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(
       caches.match(request).then((cachedResponse) => {
         if (cachedResponse) {
-          // Fetch updated version in background (stale-while-revalidate for local assets)
-          fetch(request).then((networkResponse) => {
-            if (networkResponse && networkResponse.status === 200) {
-              caches.open(CACHE_NAME).then((cache) => cache.put(request, networkResponse));
-            }
-          }).catch(() => { /* offline fallback */ });
           return cachedResponse;
         }
 
@@ -92,11 +100,6 @@ self.addEventListener('fetch', (event) => {
             cache.put(request, responseToCache);
           });
           return networkResponse;
-        }).catch(() => {
-          // If navigating to an HTML page while offline, return cached index.html
-          if (request.headers.get('accept')?.includes('text/html')) {
-            return caches.match('/index.html');
-          }
         });
       })
     );
